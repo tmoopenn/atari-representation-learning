@@ -3,14 +3,15 @@ from collections import deque
 from itertools import chain
 import numpy as np
 import torch
+import cv2
 import time
 import os
 from .envs import make_vec_envs
 from .utils import download_run
-try:
-    import wandb
-except:
-    pass
+#try:
+#    import wandb
+#except:
+#    pass
 
 
 checkpointed_steps_full = [10753536, 1076736, 11828736, 12903936, 13979136, 15054336, 1536, 16129536, 17204736,
@@ -84,12 +85,22 @@ def get_ppo_rollouts(env_name, steps, seed=42, num_processes=1,
     obs = envs.reset()
     entropies = []
     for step in range(steps // num_processes):
-        # Take action using a random policy
-        with torch.no_grad():
-            _, action, _, _, actor_features, dist_entropy = actor_critic.act(obs, None, masks, deterministic=False)
-        action = torch.tensor([envs.action_space.sample() if np.random.uniform(0, 1) < 0.2 else action[i]
+        ## convert to grayscale ##
+        if color:
+            obs_mod = obs.squeeze(0)
+            obs_mod = obs_mod.permute((1,2,0)).numpy()
+            grayscale_obs = cv2.cvtColor(obs_mod, cv2.COLOR_RGB2GRAY)
+            grayscale_obs = torch.tensor(grayscale_obs).unsqueeze(0).unsqueeze(0)
+            with torch.no_grad():
+                _, action, _, _, actor_features, dist_entropy = actor_critic.act(grayscale_obs, None, masks, deterministic=False)
+        else:
+            with torch.no_grad():
+                _, action, _, _, actor_features, dist_entropy = actor_critic.act(obs, None, masks, deterministic=False)
+        action = torch.tensor([envs.action_space.sample() if np.random.uniform(0, 1) < 0.15 else action[i]
                                for i in range(num_processes)]).unsqueeze(dim=1)
         entropies.append(dist_entropy.clone())
+        envs.render()
+        time.sleep(0.01)
         obs, reward, done, infos = envs.step(action)
         for i, info in enumerate(infos):
             if 'episode' in info.keys():
@@ -110,10 +121,10 @@ def get_ppo_rollouts(env_name, steps, seed=42, num_processes=1,
     episode_labels = list(chain.from_iterable(episode_labels))
     mean_entropy = torch.stack(entropies).mean()
     mean_episode_reward = np.mean(episode_rewards)
-    try:
-        wandb.log({'action_entropy': mean_entropy, 'mean_reward': mean_episode_reward})
-    except:
-        pass
+    #try:
+    #    wandb.log({'action_entropy': mean_entropy, 'mean_reward': mean_episode_reward})
+    #except:
+    #    pass
 
     return episodes, episode_labels
 
@@ -192,7 +203,3 @@ def get_episodes(env_name,
 
     if train_mode == "dry_run":
         return episodes, episode_labels
-
-
-
-
