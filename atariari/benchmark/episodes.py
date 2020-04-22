@@ -99,8 +99,7 @@ def get_ppo_rollouts(env_name, steps, seed=42, num_processes=1,
         action = torch.tensor([envs.action_space.sample() if np.random.uniform(0, 1) < 0.15 else action[i]
                                for i in range(num_processes)]).unsqueeze(dim=1)
         entropies.append(dist_entropy.clone())
-        envs.render()
-        time.sleep(0.01)
+      
         obs, reward, done, infos = envs.step(action)
         for i, info in enumerate(infos):
             if 'episode' in info.keys():
